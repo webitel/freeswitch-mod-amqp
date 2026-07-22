@@ -1,0 +1,65 @@
+name: Release branch
+
+# Listens for the org-wide release event dispatched from webitel/.github and creates
+# the release branch in this repository.
+on:
+  repository_dispatch:
+    types: [ create-release-branch ]   # client_payload: { version }
+
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release branch (vYY.MM), e.g. v26.04"
+        type: string
+        required: true
+        default: "vYY.MM"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: create-release-branch-${{ github.event.client_payload.version || inputs.version }}
+  cancel-in-progress: false
+
+jobs:
+  create:
+    name: Create
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve and validate version
+        id: version
+        env:
+          CLIENT_VERSION: ${{ github.event.client_payload.version }}
+          INPUT_VERSION: ${{ inputs.version }}
+        
+        run: |
+          set -euo pipefail
+          version="${CLIENT_VERSION:-$INPUT_VERSION}"
+
+          if [ -z "$version" ] || [ "$version" = "vYY.MM" ]; then
+            echo "::error::version is required (replace the vYY.MM placeholder, e.g. v26.04)"
+            exit 1
+          fi
+
+          if ! printf '%s' "$version" | grep -Eq '^v[0-9]{2}\.[0-9]{2}$'; then
+            echo "::error::invalid version '$version' (expected vYY.MM, e.g. v26.04)"
+            exit 1
+          fi
+          
+          echo "value=$version" >> "$GITHUB_OUTPUT"
+          echo "Release version: $version"
+
+      - name: Create GitHub App token
+        uses: webitel/reusable-workflows/actions/create-github-app-token@create-github-app-token-v1
+        id: app-token
+        with:
+          client-id: ${{ vars.DELIVERY_BOT_CLIENT_ID }}
+          private-key: ${{ secrets.DELIVERY_BOT_APP_PEM }}
+
+      - name: Create release branch
+        uses: peterjgrainger/action-create-branch@v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+        
+        with:
+          branch: ${{ steps.version.outputs.value }}
