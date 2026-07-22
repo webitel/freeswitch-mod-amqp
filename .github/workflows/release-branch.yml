@@ -24,7 +24,7 @@ concurrency:
 jobs:
   create:
     name: Create
-    runs-on: ubuntu-latest
+    runs-on: [ arc-runner-set ]
     steps:
       - name: Resolve and validate version
         id: version
