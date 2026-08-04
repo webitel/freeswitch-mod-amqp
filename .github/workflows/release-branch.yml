@@ -56,10 +56,33 @@ jobs:
           client-id: ${{ vars.DELIVERY_BOT_CLIENT_ID }}
           private-key: ${{ secrets.DELIVERY_BOT_APP_PEM }}
 
-      - name: Create release branch
-        uses: peterjgrainger/action-create-branch@v3.0.0
-        env:
-          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
-        
+      - name: Checkout
+        uses: actions/checkout@v7
         with:
-          branch: ${{ steps.version.outputs.value }}
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Create release branch
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+
+        run: |
+          set -euo pipefail
+
+          # re-runs are expected: continue from an existing release branch instead of rewinding it
+          if git ls-remote --exit-code --heads origin "$VERSION" >/dev/null 2>&1; then
+            echo "branch $VERSION already exists; continuing from it"
+            git fetch --depth=1 origin "+refs/heads/$VERSION:refs/remotes/origin/$VERSION"
+            git switch -c "$VERSION" "origin/$VERSION"
+          else
+            git switch -c "$VERSION"
+          fi
+
+      - name: Push release branch
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+
+        run: |
+          set -euo pipefail
+
+          git push origin "HEAD:refs/heads/$VERSION"
+          echo "branch $VERSION is at $(git rev-parse HEAD)"
